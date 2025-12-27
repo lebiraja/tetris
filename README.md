@@ -1,5 +1,9 @@
 # Tetris Game - C++ with SDL2 Graphics 🎮
 
+
+I DON'T LIKE PLAYING GAMES, RECENTLY I WANTED TO BUILD SOMETHING I WAS SO BORED AND SO I BUILD THIS, IDK NOW I'M BORED AGAIN IMPROVE THIS IS IF YOU GUYS ARE BORED TOO.......
+
+
 A fully functional, modern Tetris game implementation in C++ with beautiful SDL2 graphical rendering. Features a sleek dark theme UI, smooth 60 FPS gameplay, and classic Tetris mechanics!
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
