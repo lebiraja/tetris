@@ -28,8 +28,8 @@ public:
     void init();
     void clear();
     void renderGame(const Board& board, const Tetromino& currentPiece, 
-                    const Tetromino& nextPiece, int score, int level, int lines);
-    void renderGameOver(int score, int level, int lines);
+                    const Tetromino& nextPiece, int score, int highScore, int level, int lines);
+    void renderGameOver(int score, int highScore, int level, int lines);
     void present();
     bool isRunning() const;
     

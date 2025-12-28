@@ -14,6 +14,7 @@ private:
     std::unique_ptr<Renderer> renderer;
     
     int score;
+    int highScore;
     int level;
     int lines;
     int frameCounter;
@@ -40,6 +41,7 @@ public:
     bool isRunning() const { return running; }
     
     int getScore() const { return score; }
+    int getHighScore() const { return highScore; }
     int getLevel() const { return level; }
     int getLines() const { return lines; }
     
@@ -54,6 +56,9 @@ private:
     void lockPiece();
     void increaseLevel();
     void updateDropSpeed();
+    void saveHighScore();
+    void loadHighScore();
+    void resetGame();
 };
 
 #endif

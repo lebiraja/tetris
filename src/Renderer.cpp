@@ -85,7 +85,7 @@ void Renderer::renderBlock(int gridX, int gridY, SDL_Color color) {
 }
 
 void Renderer::renderGame(const Board& board, const Tetromino& currentPiece,
-                          const Tetromino& nextPiece, int score, int level, int lines) {
+                          const Tetromino& nextPiece, int score, int highScore, int level, int lines) {
     // Draw board background with gradient effect
     SDL_SetRenderDrawColor(renderer, 25, 28, 40, 255);
     SDL_Rect boardBg = {boardX - 5, boardY - 5, 
@@ -132,29 +132,40 @@ void Renderer::renderGame(const Board& board, const Tetromino& currentPiece,
     int panelX = boardX + 10 * blockSize + 40;
     int panelY = boardY;
     
-    // Title with better color
-    renderText("TETRIS", panelX, panelY - 25, {100, 200, 255, 255});
+    // Title with better color and styling
+    renderText("T E T R I S", panelX - 15, panelY - 30, {100, 200, 255, 255});
     
     // Draw separator line with accent color
     SDL_SetRenderDrawColor(renderer, 80, 120, 180, 255);
-    SDL_RenderDrawLine(renderer, panelX - 10, panelY + 5, panelX + 180, panelY + 5);
+    SDL_RenderDrawLine(renderer, panelX - 10, panelY + 5, panelX + 200, panelY + 5);
+    
+    // Stats Panel Background
+    SDL_SetRenderDrawColor(renderer, 20, 25, 35, 180);
+    SDL_Rect statsBox = {panelX - 10, panelY + 15, 210, 145};
+    SDL_RenderFillRect(renderer, &statsBox);
+    SDL_SetRenderDrawColor(renderer, 60, 100, 150, 255);
+    SDL_RenderDrawRect(renderer, &statsBox);
     
     // Score section with improved colors
-    renderText("SCORE:", panelX, panelY + 20, {150, 180, 220, 255});
-    renderText(std::to_string(score), panelX + 10, panelY + 40, {255, 220, 100, 255});
+    renderText("SCORE", panelX, panelY + 25, {150, 180, 220, 255});
+    renderText(std::to_string(score), panelX + 10, panelY + 42, {255, 255, 100, 255});
+    
+    // High Score section with trophy color
+    renderText("HIGH SCORE", panelX, panelY + 65, {255, 215, 0, 255});
+    renderText(std::to_string(highScore), panelX + 10, panelY + 82, {255, 215, 0, 255});
     
     // Level section
-    renderText("LEVEL:", panelX, panelY + 75, {150, 180, 220, 255});
-    renderText(std::to_string(level), panelX + 10, panelY + 95, {100, 255, 150, 255});
+    renderText("LEVEL", panelX, panelY + 105, {150, 180, 220, 255});
+    renderText(std::to_string(level), panelX + 10, panelY + 122, {100, 255, 150, 255});
     
     // Lines section
-    renderText("LINES:", panelX, panelY + 130, {150, 180, 220, 255});
-    renderText(std::to_string(lines), panelX + 10, panelY + 150, {255, 150, 200, 255});
+    renderText("LINES", panelX, panelY + 145, {150, 180, 220, 255});
+    renderText(std::to_string(lines), panelX + 10, panelY + 162, {255, 150, 200, 255});
     
     // Next piece label
-    renderText("NEXT:", panelX, panelY + 185, {150, 180, 220, 255});
-    SDL_SetRenderDrawColor(renderer, 25, 28, 40, 255);
-    SDL_Rect nextBox = {panelX - 5, panelY + 205, 140, 100};
+    renderText("NEXT PIECE", panelX, panelY + 195, {150, 180, 220, 255});
+    SDL_SetRenderDrawColor(renderer, 20, 25, 35, 180);
+    SDL_Rect nextBox = {panelX - 10, panelY + 210, 150, 110};
     SDL_RenderFillRect(renderer, &nextBox);
     SDL_SetRenderDrawColor(renderer, 80, 120, 180, 255);
     SDL_RenderDrawRect(renderer, &nextBox);
@@ -162,8 +173,8 @@ void Renderer::renderGame(const Board& board, const Tetromino& currentPiece,
     // Draw next piece preview with better positioning
     auto nextCells = nextPiece.getOccupiedCells();
     for (const auto& cell : nextCells) {
-        int px = panelX + cell.first * 20 + 20;
-        int py = panelY + cell.second * 20 + 225;
+        int px = panelX + cell.first * 22 + 22;
+        int py = panelY + cell.second * 22 + 235;
         SDL_Rect block = {px, py, 18, 18};
         SDL_SetRenderDrawColor(renderer, pieceColors[nextPiece.getType()].r,
                               pieceColors[nextPiece.getType()].g,
@@ -192,31 +203,61 @@ void Renderer::renderGame(const Board& board, const Tetromino& currentPiece,
     renderText("Q    - QUIT", boardX + 8, ctrlY + 132, {200, 210, 220, 255});
 }
 
-void Renderer::renderGameOver(int score, int level, int lines) {
+void Renderer::renderGameOver(int score, int highScore, int level, int lines) {
     // Semi-transparent overlay
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200);
     SDL_Rect overlay = {0, 0, screenWidth, screenHeight};
     SDL_RenderFillRect(renderer, &overlay);
     
-    // Game Over box background
-    SDL_SetRenderDrawColor(renderer, 40, 20, 20, 200);
-    SDL_Rect gameOverBox = {200, 150, screenWidth - 400, 400};
+    // Game Over box background with gradient effect
+    SDL_SetRenderDrawColor(renderer, 40, 20, 30, 240);
+    SDL_Rect gameOverBox = {150, 120, screenWidth - 300, 480};
     SDL_RenderFillRect(renderer, &gameOverBox);
     
-    // Game Over box border
-    SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+    // Game Over box border with glow effect
+    SDL_SetRenderDrawColor(renderer, 255, 80, 80, 255);
     SDL_RenderDrawRect(renderer, &gameOverBox);
+    SDL_SetRenderDrawColor(renderer, 200, 50, 50, 150);
+    SDL_Rect outerBorder = {gameOverBox.x - 2, gameOverBox.y - 2, gameOverBox.w + 4, gameOverBox.h + 4};
+    SDL_RenderDrawRect(renderer, &outerBorder);
     
-    // Game Over text
-    renderText("GAME OVER!", 350, 170, {255, 0, 0, 255});
+    // Game Over text with larger size
+    renderText("G A M E  O V E R !", 260, 150, {255, 80, 80, 255});
     
-    // Stats
-    renderText("Final Score: " + std::to_string(score), 300, 250, {255, 255, 0, 255});
-    renderText("Level Reached: " + std::to_string(level), 300, 290, {0, 255, 255, 255});
-    renderText("Lines Cleared: " + std::to_string(lines), 300, 330, {0, 255, 0, 255});
+    // Separator line
+    SDL_SetRenderDrawColor(renderer, 150, 150, 150, 255);
+    SDL_RenderDrawLine(renderer, 220, 190, 580, 190);
     
-    renderText("Thanks for playing!", 320, 390, {200, 200, 200, 255});
-    renderText("Close the window to exit", 320, 430, {150, 150, 150, 255});
+    // Stats with improved layout
+    bool newHighScore = (score == highScore && score > 0);
+    
+    if (newHighScore) {
+        renderText("NEW HIGH SCORE!", 280, 215, {255, 215, 0, 255});
+    }
+    
+    renderText("FINAL SCORE", 280, newHighScore ? 255 : 220, {200, 220, 255, 255});
+    renderText(std::to_string(score), 300, newHighScore ? 275 : 240, {255, 255, 100, 255});
+    
+    renderText("HIGH SCORE", 280, newHighScore ? 315 : 290, {255, 215, 0, 255});
+    renderText(std::to_string(highScore), 300, newHighScore ? 335 : 310, {255, 215, 0, 255});
+    
+    renderText("LEVEL REACHED", 280, newHighScore ? 375 : 360, {150, 220, 255, 255});
+    renderText(std::to_string(level), 300, newHighScore ? 395 : 380, {100, 255, 200, 255});
+    
+    renderText("LINES CLEARED", 280, newHighScore ? 435 : 430, {255, 150, 200, 255});
+    renderText(std::to_string(lines), 300, newHighScore ? 455 : 450, {255, 150, 200, 255});
+    
+    // Footer
+    SDL_SetRenderDrawColor(renderer, 150, 150, 150, 255);
+    SDL_RenderDrawLine(renderer, 220, newHighScore ? 495 : 485, 580, newHighScore ? 495 : 485);
+    renderText("THANKS FOR PLAYING!", 270, newHighScore ? 510 : 500, {200, 200, 200, 255});
+    renderText("CLOSE WINDOW TO EXIT", 260, newHighScore ? 540 : 530, {150, 150, 150, 255});
+    
+    // Retry instructions with highlighted colors
+    SDL_SetRenderDrawColor(renderer, 100, 255, 100, 255);
+    SDL_RenderDrawLine(renderer, 220, newHighScore ? 565 : 555, 580, newHighScore ? 565 : 555);
+    renderText("PRESS R TO RETRY", 280, newHighScore ? 575 : 565, {100, 255, 100, 255});
+    renderText("PRESS Q TO QUIT", 290, newHighScore ? 605 : 595, {255, 100, 100, 255});
 }
 
 void Renderer::renderText(const std::string& text, int x, int y, SDL_Color color) {

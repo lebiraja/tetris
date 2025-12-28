@@ -2,13 +2,15 @@
 #include <iostream>
 #include <cstdlib>
 #include <ctime>
+#include <fstream>
 #include <SDL2/SDL.h>
 
 Game::Game() 
     : currentPiece(I), nextPiece(L), renderer(std::make_unique<Renderer>()),
-      score(0), level(1), lines(0), frameCounter(0), 
+      score(0), highScore(0), level(1), lines(0), frameCounter(0), 
       gameOver(false), paused(false), running(true), dropSpeed(60) {
     srand(static_cast<unsigned>(time(nullptr)));
+    loadHighScore();
 }
 
 void Game::init() {
@@ -93,12 +95,27 @@ void Game::render() {
     renderer->clear();
     
     if (gameOver && !paused) {
-        renderer->renderGameOver(score, level, lines);
+        renderer->renderGameOver(score, highScore, level, lines);
     } else {
-        renderer->renderGame(board, currentPiece, nextPiece, score, level, lines);
+        renderer->renderGame(board, currentPiece, nextPiece, score, highScore, level, lines);
     }
     
     renderer->present();
+}
+
+void Game::resetGame() {
+    // Reset game state
+    board.clear();
+    score = 0;
+    level = 1;
+    lines = 0;
+    frameCounter = 0;
+    gameOver = false;
+    paused = false;
+    dropSpeed = 60;
+    
+    // Spawn first piece
+    spawnNewPiece();
 }
 
 void Game::run() {
@@ -107,34 +124,66 @@ void Game::run() {
     const int FPS = 60;
     const int frameDelay = 1000 / FPS;
     
-    while (running && !gameOver) {
-        Uint32 frameStart = SDL_GetTicks();
-        
-        handleInput();
-        if (!running) break;
-        
-        update();
-        render();
-        
-        Uint32 frameTime = SDL_GetTicks() - frameStart;
-        if (frameDelay > frameTime) {
-            SDL_Delay(frameDelay - frameTime);
-        }
-    }
+    bool retrying = true;
     
-    // Show game over screen briefly
-    while (running) {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT) {
-                running = false;
+    while (retrying && running) {
+        // Main game loop
+        while (running && !gameOver) {
+            Uint32 frameStart = SDL_GetTicks();
+            
+            handleInput();
+            if (!running) break;
+            
+            update();
+            render();
+            
+            Uint32 frameTime = SDL_GetTicks() - frameStart;
+            if (frameDelay > frameTime) {
+                SDL_Delay(frameDelay - frameTime);
             }
         }
         
-        renderer->clear();
-        renderer->renderGameOver(score, level, lines);
-        renderer->present();
-        SDL_Delay(50);
+        // Save high score if beaten
+        if (gameOver && running) {
+            if (score > highScore) {
+                highScore = score;
+                saveHighScore();
+            }
+        }
+        
+        // Show game over screen and handle retry
+        bool waitingForInput = true;
+        while (running && waitingForInput) {
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
+                switch (event.type) {
+                    case SDL_QUIT:
+                        running = false;
+                        waitingForInput = false;
+                        retrying = false;
+                        break;
+                    case SDL_KEYDOWN:
+                        if (event.key.keysym.sym == SDLK_r) {
+                            // Retry the game
+                            resetGame();
+                            waitingForInput = false;
+                        } else if (event.key.keysym.sym == SDLK_q) {
+                            // Quit
+                            running = false;
+                            waitingForInput = false;
+                            retrying = false;
+                        }
+                        break;
+                }
+            }
+            
+            if (waitingForInput) {
+                renderer->clear();
+                renderer->renderGameOver(score, highScore, level, lines);
+                renderer->present();
+                SDL_Delay(50);
+            }
+        }
     }
 }
 
@@ -201,4 +250,22 @@ void Game::increaseLevel() {
 
 void Game::updateDropSpeed() {
     dropSpeed = std::max(10, 60 - (level - 1) * 5);
+}
+
+void Game::saveHighScore() {
+    std::ofstream file("highscore.txt");
+    if (file.is_open()) {
+        file << highScore;
+        file.close();
+    }
+}
+
+void Game::loadHighScore() {
+    std::ifstream file("highscore.txt");
+    if (file.is_open()) {
+        file >> highScore;
+        file.close();
+    } else {
+        highScore = 0;
+    }
 }
