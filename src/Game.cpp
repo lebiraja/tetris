@@ -5,10 +5,12 @@
 #include <fstream>
 #include <SDL2/SDL.h>
 
-Game::Game() 
-    : currentPiece(I), nextPiece(L), renderer(std::make_unique<Renderer>()),
-      score(0), highScore(0), level(1), lines(0), frameCounter(0), 
-      gameOver(false), paused(false), running(true), dropSpeed(60) {
+Game::Game()
+    : currentPiece(I), nextPiece(L), ghostPiece(I),
+      holdPiece(nullptr), renderer(std::make_unique<Renderer>()),
+      score(0), highScore(0), level(1), lines(0), frameCounter(0),
+      gameOver(false), paused(false), running(true), canHold(true),
+      state(GameState::TITLE), dropSpeed(60), animFrameCounter(0) {
     srand(static_cast<unsigned>(time(nullptr)));
     loadHighScore();
 }
@@ -29,32 +31,62 @@ void Game::handleInput() {
                 gameOver = true;
                 break;
             case SDL_KEYDOWN:
-                switch (event.key.keysym.sym) {
-                    case SDLK_a:
-                        movePieceLeft();
-                        break;
-                    case SDLK_d:
-                        movePieceRight();
-                        break;
-                    case SDLK_w:
-                        rotatePiece();
-                        break;
-                    case SDLK_s:
-                        movePieceDown();
-                        break;
-                    case SDLK_SPACE:
-                        // Hard drop
-                        while (movePieceDown());
-                        break;
-                    case SDLK_p:
-                        paused = !paused;
-                        break;
-                    case SDLK_q:
+                // Handle input based on current state
+                if (state == GameState::TITLE) {
+                    if (event.key.keysym.sym == SDLK_RETURN ||
+                        event.key.keysym.sym == SDLK_SPACE) {
+                        state = GameState::PLAYING;
+                        resetGame();
+                    } else if (event.key.keysym.sym == SDLK_q) {
+                        running = false;
+                    }
+                } else if (state == GameState::PAUSED) {
+                    if (event.key.keysym.sym == SDLK_p) {
+                        state = GameState::PLAYING;
+                        paused = false;
+                    } else if (event.key.keysym.sym == SDLK_q) {
                         gameOver = true;
                         running = false;
-                        break;
-                    default:
-                        break;
+                    }
+                } else if (state == GameState::PLAYING) {
+                    switch (event.key.keysym.sym) {
+                        case SDLK_a:
+                        case SDLK_LEFT:
+                            movePieceLeft();
+                            updateGhostPiece();
+                            break;
+                        case SDLK_d:
+                        case SDLK_RIGHT:
+                            movePieceRight();
+                            updateGhostPiece();
+                            break;
+                        case SDLK_w:
+                        case SDLK_UP:
+                            rotatePiece();
+                            updateGhostPiece();
+                            break;
+                        case SDLK_s:
+                        case SDLK_DOWN:
+                            movePieceDown();
+                            break;
+                        case SDLK_SPACE:
+                            // Hard drop
+                            while (movePieceDown());
+                            break;
+                        case SDLK_c:
+                            holdCurrentPiece();
+                            break;
+                        case SDLK_p:
+                            paused = true;
+                            state = GameState::PAUSED;
+                            break;
+                        case SDLK_q:
+                            gameOver = true;
+                            running = false;
+                            break;
+                        default:
+                            break;
+                    }
                 }
                 break;
         }
@@ -62,30 +94,33 @@ void Game::handleInput() {
 }
 
 void Game::update() {
+    if (state != GameState::PLAYING) return;
     if (gameOver || paused) return;
-    
+
     frameCounter++;
-    
+
     if (frameCounter >= dropSpeed) {
         frameCounter = 0;
         if (!movePieceDown()) {
             lockPiece();
             int clearedLines = board.clearLines();
-            
+
             if (clearedLines > 0) {
                 lines += clearedLines;
                 // Score calculation: more lines at once = more points
-                score += 100 * clearedLines * level;
-                
+                int lineBonus[] = {0, 100, 300, 500, 800};  // Single, Double, Triple, Tetris
+                score += lineBonus[clearedLines] * level;
+
                 if (lines % 10 == 0) {
                     increaseLevel();
                 }
             }
-            
+
             spawnNewPiece();
-            
+
             if (!board.canPlace(currentPiece)) {
                 gameOver = true;
+                state = GameState::GAME_OVER;
             }
         }
     }
@@ -93,13 +128,33 @@ void Game::update() {
 
 void Game::render() {
     renderer->clear();
-    
-    if (gameOver && !paused) {
-        renderer->renderGameOver(score, highScore, level, lines);
-    } else {
-        renderer->renderGame(board, currentPiece, nextPiece, score, highScore, level, lines);
+
+    switch (state) {
+        case GameState::TITLE:
+            renderer->renderTitleScreen();
+            break;
+
+        case GameState::PLAYING:
+            renderer->renderGame(board, currentPiece, nextPiece, score, highScore, level, lines,
+                                &ghostPiece, holdPiece.get(), canHold);
+            break;
+
+        case GameState::PAUSED:
+            renderer->renderGame(board, currentPiece, nextPiece, score, highScore, level, lines,
+                                &ghostPiece, holdPiece.get(), canHold);
+            renderer->renderPauseScreen();
+            break;
+
+        case GameState::GAME_OVER:
+            renderer->renderGameOver(score, highScore, level, lines);
+            break;
+
+        case GameState::LINE_CLEAR_ANIM:
+            renderer->renderGame(board, currentPiece, nextPiece, score, highScore, level, lines,
+                                &ghostPiece, holdPiece.get(), canHold);
+            break;
     }
-    
+
     renderer->present();
 }
 
@@ -113,76 +168,55 @@ void Game::resetGame() {
     gameOver = false;
     paused = false;
     dropSpeed = 60;
-    
+    canHold = true;
+    holdPiece.reset();
+
     // Spawn first piece
     spawnNewPiece();
 }
 
 void Game::run() {
     init();
-    
+
     const int FPS = 60;
     const int frameDelay = 1000 / FPS;
-    
-    bool retrying = true;
-    
-    while (retrying && running) {
-        // Main game loop
-        while (running && !gameOver) {
-            Uint32 frameStart = SDL_GetTicks();
-            
-            handleInput();
-            if (!running) break;
-            
-            update();
-            render();
-            
-            Uint32 frameTime = SDL_GetTicks() - frameStart;
-            if (frameDelay > frameTime) {
-                SDL_Delay(frameDelay - frameTime);
-            }
-        }
-        
-        // Save high score if beaten
-        if (gameOver && running) {
+
+    while (running) {
+        Uint32 frameStart = SDL_GetTicks();
+
+        handleInput();
+        if (!running) break;
+
+        update();
+        render();
+
+        // Handle game over state
+        if (state == GameState::GAME_OVER) {
+            // Save high score if beaten
             if (score > highScore) {
                 highScore = score;
                 saveHighScore();
             }
-        }
-        
-        // Show game over screen and handle retry
-        bool waitingForInput = true;
-        while (running && waitingForInput) {
+
+            // Wait for retry or quit
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
-                switch (event.type) {
-                    case SDL_QUIT:
+                if (event.type == SDL_QUIT) {
+                    running = false;
+                } else if (event.type == SDL_KEYDOWN) {
+                    if (event.key.keysym.sym == SDLK_r) {
+                        resetGame();
+                        state = GameState::PLAYING;
+                    } else if (event.key.keysym.sym == SDLK_q) {
                         running = false;
-                        waitingForInput = false;
-                        retrying = false;
-                        break;
-                    case SDL_KEYDOWN:
-                        if (event.key.keysym.sym == SDLK_r) {
-                            // Retry the game
-                            resetGame();
-                            waitingForInput = false;
-                        } else if (event.key.keysym.sym == SDLK_q) {
-                            // Quit
-                            running = false;
-                            waitingForInput = false;
-                            retrying = false;
-                        }
-                        break;
+                    }
                 }
             }
-            
-            if (waitingForInput) {
-                renderer->clear();
-                renderer->renderGameOver(score, highScore, level, lines);
-                renderer->present();
-                SDL_Delay(50);
-            }
+        }
+
+        Uint32 frameTime = SDL_GetTicks() - frameStart;
+        if (frameDelay > frameTime) {
+            SDL_Delay(frameDelay - frameTime);
         }
     }
 }
@@ -190,51 +224,94 @@ void Game::run() {
 void Game::spawnNewPiece() {
     currentPiece = nextPiece;
     currentPiece.setPosition(3, 0);
-    
+
     TetrominoType randomType = static_cast<TetrominoType>(rand() % 7);
     nextPiece = Tetromino(randomType);
+
+    // Reset hold capability for new piece
+    canHold = true;
+
+    // Update ghost piece
+    updateGhostPiece();
+}
+
+void Game::updateGhostPiece() {
+    // Copy current piece to ghost
+    ghostPiece = currentPiece;
+
+    // Drop ghost piece to the bottom
+    while (true) {
+        ghostPiece.moveDown();
+        if (!board.canPlace(ghostPiece)) {
+            ghostPiece.moveUp();
+            break;
+        }
+    }
+}
+
+void Game::holdCurrentPiece() {
+    if (!canHold) return;
+
+    if (holdPiece) {
+        // Swap current with held piece
+        Tetromino temp = currentPiece;
+        currentPiece = *holdPiece;
+        currentPiece.setPosition(3, 0);
+        holdPiece = std::make_unique<Tetromino>(temp.getType());
+    } else {
+        // Store current piece and spawn new one
+        holdPiece = std::make_unique<Tetromino>(currentPiece.getType());
+        currentPiece = nextPiece;
+        currentPiece.setPosition(3, 0);
+
+        TetrominoType randomType = static_cast<TetrominoType>(rand() % 7);
+        nextPiece = Tetromino(randomType);
+    }
+
+    canHold = false;  // Can only hold once per piece drop
+    updateGhostPiece();
 }
 
 bool Game::movePieceDown() {
     currentPiece.moveDown();
-    
+
     if (board.canPlace(currentPiece)) {
         return true;
     }
-    
+
     currentPiece.moveUp();
     return false;
 }
 
 bool Game::movePieceLeft() {
     currentPiece.moveLeft();
-    
+
     if (board.canPlace(currentPiece)) {
         return true;
     }
-    
+
     currentPiece.moveRight();
     return false;
 }
 
 bool Game::movePieceRight() {
     currentPiece.moveRight();
-    
+
     if (board.canPlace(currentPiece)) {
         return true;
     }
-    
+
     currentPiece.moveLeft();
     return false;
 }
 
 bool Game::rotatePiece() {
     currentPiece.rotate();
-    
+
     if (board.canPlace(currentPiece)) {
         return true;
     }
-    
+
     currentPiece.rotateCounterClockwise();
     return false;
 }
@@ -249,7 +326,7 @@ void Game::increaseLevel() {
 }
 
 void Game::updateDropSpeed() {
-    dropSpeed = std::max(10, 60 - (level - 1) * 5);
+    dropSpeed = std::max(5, 60 - (level - 1) * 5);
 }
 
 void Game::saveHighScore() {
